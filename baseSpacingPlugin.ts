@@ -2,6 +2,17 @@ import plugin from "tailwindcss/plugin";
 
 export default function baseSpacingPlugin() {
   return plugin(function ({ addComponents, theme }) {
+    const baseSpacing = Object.entries(
+      theme("spacing") as Record<string, string>
+    )
+      .filter(([key]) => key.startsWith("base-"))
+      .reduce<Record<string, string>>(
+        (acc, [key, value]) => ({ ...acc, [key.replace("base-", "")]: value }),
+        {}
+      );
+
+    if (Object.keys(baseSpacing).length === 0) return;
+
     const utilities = [
       { prefix: "m", property: "margin", canBeNegative: true },
       { prefix: "p", property: "padding", canBeNegative: false },
@@ -9,7 +20,7 @@ export default function baseSpacingPlugin() {
       { prefix: "bottom", property: "bottom", canBeNegative: true },
       { prefix: "left", property: "left", canBeNegative: true },
       { prefix: "right", property: "right", canBeNegative: true },
-    ];
+    ] as const;
 
     const directions = [
       { suffix: "", sides: [""] },
@@ -19,59 +30,48 @@ export default function baseSpacingPlugin() {
       { suffix: "r", sides: ["-right"] },
       { suffix: "b", sides: ["-bottom"] },
       { suffix: "l", sides: ["-left"] },
-    ];
+    ] as const;
 
-    const components: { [key: string]: any } = {};
+    const components: Record<
+      string,
+      Record<string, Record<string, string>>
+    > = {};
 
-    utilities.forEach(({ prefix, property, canBeNegative }) => {
-      const isPositionProperty = ["top", "bottom", "left", "right"].includes(
-        prefix
+    const generateStyles = (
+      property: string,
+      sides: readonly string[],
+      value: string
+    ): Record<string, string> =>
+      sides.reduce(
+        (acc, side) => ({ ...acc, [`${property}${side}`]: value }),
+        {}
       );
 
-      if (isPositionProperty) {
-        const className = `.${prefix}-base`;
-        const negativeClassName = `.-${prefix}-base`;
-
-        components[className] = {
-          [property]: theme("spacing.base-sm"),
-          "@screen md": { [property]: theme("spacing.base-md") },
-          "@screen xl": { [property]: theme("spacing.base-xl") },
-        };
-
-        components[negativeClassName] = {
-          [property]: `-${theme("spacing.base-sm")}`,
-          "@screen md": { [property]: `-${theme("spacing.base-md")}` },
-          "@screen xl": { [property]: `-${theme("spacing.base-xl")}` },
-        };
-      } else {
-        directions.forEach(({ suffix, sides }) => {
+    utilities.forEach(({ prefix, property, canBeNegative }) => {
+      directions.forEach(({ suffix, sides }) => {
+        Object.entries(baseSpacing).forEach(([breakpoint, value]) => {
           const className = `.${prefix}${suffix}-base`;
+          const negativeClassName = `.-${prefix}${suffix}-base`;
 
-          const generateStyles = (value: string) =>
-            sides.reduce(
-              (acc, side) => ({
-                ...acc,
-                [`${property}${side}`]: value,
-              }),
-              {}
-            );
+          if (!components[className]) {
+            components[className] = {};
+          }
+          if (!components[negativeClassName]) {
+            components[negativeClassName] = {};
+          }
 
-          components[className] = {
-            ...generateStyles(theme("spacing.base-sm")),
-            "@screen md": generateStyles(theme("spacing.base-md")),
-            "@screen xl": generateStyles(theme("spacing.base-xl")),
-          };
+          components[className][`@screen ${breakpoint}`] = generateStyles(
+            property,
+            sides,
+            value
+          );
 
           if (canBeNegative) {
-            const negativeClassName = `.-${prefix}${suffix}-base`;
-            components[negativeClassName] = {
-              ...generateStyles(`-${theme("spacing.base-sm")}`),
-              "@screen md": generateStyles(`-${theme("spacing.base-md")}`),
-              "@screen xl": generateStyles(`-${theme("spacing.base-xl")}`),
-            };
+            components[negativeClassName][`@screen ${breakpoint}`] =
+              generateStyles(property, sides, `-${value}`);
           }
         });
-      }
+      });
     });
 
     addComponents(components);
